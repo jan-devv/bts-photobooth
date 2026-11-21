@@ -1,20 +1,15 @@
 /* ==========================================================================
-   TAEHYUNG PHOTOISM & LIFE4CUTS BOOTH (FAST CACHED AI CUTOUTS)
-   - Quantized isnet_quint8 model + 720px inference cap (4x faster)
-   - Parallel batch loading + browser CacheStorage persistence
-   - All existing borders, shades, stickers, 4-cut camera & controls intact
+   TAEHYUNG PHOTOISM & LIFE4CUTS BOOTH (INSTANT ZERO-LAG PNG CUTOUTS)
+   - Direct instant loading of pre-cut transparent PNGs (0.1s load time)
+   - All borders, custom shades, stickers, 4-cut camera & controls intact
    ========================================================================== */
-
-import { removeBackground } from 'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm';
-
-const CACHE_NAME = 'taehyung-cutouts-v2';
 
 const PHOTO_CATALOG = [
   { id: 'pose1', label: 'Bandana Front', base: 'assets/photos/pose1' },
   { id: 'pose2', label: 'Bandana Side', base: 'assets/photos/pose2' },
   { id: 'pose3', label: 'Black Turtleneck', base: 'assets/photos/pose3' },
   { id: 'pose4', label: 'Gray Checkered Tie', base: 'assets/photos/pose4' },
-  { id: 'pose5', label: 'White Tee Peace', base: 'assets/photos/pose5', whiteOutfit: true },
+  { id: 'pose5', label: 'White Tee Peace', base: 'assets/photos/pose5' },
   { id: 'pose6', label: 'Black Tee Arm Pose', base: 'assets/photos/pose6' },
   { id: 'pose7', label: 'Leather Glove Pose', base: 'assets/photos/pose7' },
   { id: 'pose8', label: 'Navy Cardigan', base: 'assets/photos/pose8' }
@@ -185,10 +180,6 @@ function getActiveTheme() {
   };
 }
 
-/* ==========================================================================
-   1. FAST CACHED AI BACKGROUND REMOVAL + ZERO-HALO MATTE REFINEMENT
-   ========================================================================== */
-
 function tryLoadImage(basePath) {
   const exts = ['.png', '.jpg', '.jpeg', '.webp'];
   return new Promise(resolve => {
@@ -203,168 +194,6 @@ function tryLoadImage(basePath) {
     }
     attempt();
   });
-}
-
-function downscaleForInference(rawImg, maxDim = 720) {
-  const w = rawImg.naturalWidth || rawImg.width;
-  const h = rawImg.naturalHeight || rawImg.height;
-  const scale = Math.min(1, maxDim / Math.max(w, h));
-  const c = document.createElement('canvas');
-  c.width = Math.round(w * scale);
-  c.height = Math.round(h * scale);
-  c.getContext('2d').drawImage(rawImg, 0, 0, c.width, c.height);
-  return new Promise(resolve => c.toBlob(resolve, 'image/png'));
-}
-
-function refineCutoutMatte(sourceCanvas, options = {}) {
-  const w = sourceCanvas.width;
-  const h = sourceCanvas.height;
-  const sCtx = sourceCanvas.getContext('2d');
-  const imgData = sCtx.getImageData(0, 0, w, h);
-  const data = imgData.data;
-
-  for (let p = 0; p < w * h; p++) {
-    const i = p * 4;
-    const a = data[i + 3];
-    if (a === 0) continue;
-
-    const r = data[i], g = data[i + 1], b = data[i + 2];
-    const lum = (r + g + b) / 3;
-    const chroma = Math.max(r, g, b) - Math.min(r, g, b);
-
-    if (a < 180) {
-      data[i + 3] = 0;
-      continue;
-    }
-    if (!options.whiteOutfit && lum > 218 && chroma < 18 && a < 245) {
-      data[i + 3] = 0;
-    }
-  }
-
-  const alphaSnap = new Uint8ClampedArray(w * h);
-  for (let p = 0; p < w * h; p++) alphaSnap[p] = data[p * 4 + 3];
-
-  for (let y = 2; y < h - 2; y++) {
-    for (let x = 2; x < w - 2; x++) {
-      const p = y * w + x;
-      if (alphaSnap[p] === 0) continue;
-
-      const ring1Empty =
-        alphaSnap[p - 1] === 0 || alphaSnap[p + 1] === 0 ||
-        alphaSnap[p - w] === 0 || alphaSnap[p + w] === 0 ||
-        alphaSnap[p - w - 1] === 0 || alphaSnap[p - w + 1] === 0 ||
-        alphaSnap[p + w - 1] === 0 || alphaSnap[p + w + 1] === 0;
-
-      const ring2Empty =
-        alphaSnap[p - 2] === 0 || alphaSnap[p + 2] === 0 ||
-        alphaSnap[p - 2 * w] === 0 || alphaSnap[p + 2 * w] === 0;
-
-      const i = p * 4;
-      const lum = (data[i] + data[i + 1] + data[i + 2]) / 3;
-
-      if (ring1Empty) {
-        data[i + 3] = 0;
-      } else if (ring2Empty) {
-        if (!options.whiteOutfit && lum > 175) {
-          data[i + 3] = 0;
-        } else {
-          data[i + 3] = Math.round(alphaSnap[p] * 0.65);
-        }
-      }
-    }
-  }
-
-  sCtx.putImageData(imgData, 0, 0);
-
-  let minX = w, minY = h, maxX = 0, maxY = 0;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      if (data[(y * w + x) * 4 + 3] > 30) {
-        if (x < minX) minX = x;
-        if (x > maxX) maxX = x;
-        if (y < minY) minY = y;
-        if (y > maxY) maxY = y;
-      }
-    }
-  }
-
-  if (maxX <= minX || maxY <= minY) return sourceCanvas;
-
-  const padTop = Math.round((maxY - minY) * 0.03);
-  const cropY = Math.max(0, minY - padTop);
-  const cropH = h - cropY;
-
-  const trimmed = document.createElement('canvas');
-  trimmed.width = w;
-  trimmed.height = cropH;
-  trimmed.getContext('2d').drawImage(sourceCanvas, 0, cropY, w, cropH, 0, 0, w, cropH);
-  return trimmed;
-}
-
-async function getCachedCutout(id) {
-  if (!('caches' in window)) return null;
-  try {
-    const cache = await caches.open(CACHE_NAME);
-    const match = await cache.match(`/${id}.png`);
-    if (!match) return null;
-    const blob = await match.blob();
-    const img = new Image();
-    img.src = URL.createObjectURL(blob);
-    await new Promise(r => (img.onload = r));
-    return img;
-  } catch {
-    return null;
-  }
-}
-
-async function saveCachedCutout(id, canvasEl) {
-  if (!('caches' in window)) return;
-  try {
-    const blob = await new Promise(r => canvasEl.toBlob(r, 'image/png'));
-    if (!blob) return;
-    const cache = await caches.open(CACHE_NAME);
-    await cache.put(`/${id}.png`, new Response(blob, { headers: { 'Content-Type': 'image/png' } }));
-  } catch {
-    // Ignore storage quota errors
-  }
-}
-
-async function aiRemovePortraitBg(id, rawImg, options = {}) {
-  const cached = await getCachedCutout(id);
-  if (cached) return cached;
-
-  try {
-    const scaledBlob = await downscaleForInference(rawImg, 720);
-    const aiBlob = await removeBackground(scaledBlob, {
-      model: 'isnet_quint8',
-      output: { format: 'image/png', quality: 0.95 }
-    });
-
-    const url = URL.createObjectURL(aiBlob);
-    const aiImg = await new Promise((res, rej) => {
-      const im = new Image();
-      im.onload = () => res(im);
-      im.onerror = rej;
-      im.src = url;
-    });
-
-    const c = document.createElement('canvas');
-    c.width = aiImg.width;
-    c.height = aiImg.height;
-    c.getContext('2d').drawImage(aiImg, 0, 0);
-    URL.revokeObjectURL(url);
-
-    const refined = refineCutoutMatte(c, options);
-    saveCachedCutout(id, refined);
-
-    const finalImg = new Image();
-    finalImg.src = refined.toDataURL('image/png');
-    await new Promise(r => (finalImg.onload = r));
-    return finalImg;
-  } catch (err) {
-    console.warn('AI cutout fallback used:', err);
-    return rawImg;
-  }
 }
 
 function processHeadCutoutSticker(rawImg) {
@@ -447,48 +276,31 @@ function processHeadCutoutSticker(rawImg) {
 async function loadInitialAssets() {
   const hint = document.getElementById('status-hint');
 
-  Promise.all(
-    STICKER_CATALOG.map(async (st, i) => {
-      const raw = await tryLoadImage(st.base);
-      if (!raw) return;
-      const processed = processHeadCutoutSticker(raw);
-      processed.onload = () => {
-        state.stickers[i].img = processed;
-        renderStickerToggles();
-      };
-      if (processed.complete) {
-        state.stickers[i].img = processed;
-        renderStickerToggles();
-      }
-    })
-  );
+  const [stickerResults, photoResults] = await Promise.all([
+    Promise.all(STICKER_CATALOG.map(st => tryLoadImage(st.base))),
+    Promise.all(PHOTO_CATALOG.map(async item => ({ item, img: await tryLoadImage(item.base) })))
+  ]);
 
-  const loadedRaws = await Promise.all(
-    PHOTO_CATALOG.map(async item => ({ item, raw: await tryLoadImage(item.base) }))
-  );
-  const validItems = loadedRaws.filter(entry => entry.raw !== null);
+  stickerResults.forEach((raw, i) => {
+    if (!raw) return;
+    const processed = processHeadCutoutSticker(raw);
+    processed.onload = () => {
+      state.stickers[i].img = processed;
+      renderStickerToggles();
+    };
+    if (processed.complete) {
+      state.stickers[i].img = processed;
+      renderStickerToggles();
+    }
+  });
 
-  let completed = 0;
-  const BATCH_SIZE = 3;
-  for (let i = 0; i < validItems.length; i += BATCH_SIZE) {
-    const batch = validItems.slice(i, i + BATCH_SIZE);
-    await Promise.all(
-      batch.map(async ({ item, raw }) => {
-        const clean = await aiRemovePortraitBg(item.id, raw, { whiteOutfit: Boolean(item.whiteOutfit) });
-        state.photos.push({ id: item.id, label: item.label, img: clean });
-        completed++;
-        hint.textContent = `Loaded ${completed}/${validItems.length} poses...`;
-        renderPhotoPicker();
-      })
-    );
-  }
+  state.photos = photoResults
+    .filter(entry => entry.img !== null)
+    .map(entry => ({ id: entry.item.id, label: entry.item.label, img: entry.img }));
 
+  renderPhotoPicker();
   hint.textContent = 'All poses ready! Tap "Start 4-Cut Camera".';
 }
-
-/* ==========================================================================
-   2. LIVE WEBCAM INITIALIZATION
-   ========================================================================== */
 
 async function initCamera() {
   const label = document.getElementById('cam-status-label');
@@ -507,10 +319,6 @@ async function initCamera() {
     label.textContent = 'Allow Camera in Browser';
   }
 }
-
-/* ==========================================================================
-   3. CUTE PHOTOISM & LIFE4CUTS BORDER DECORATIONS
-   ========================================================================== */
 
 function drawBorderDecorations(ctx, theme, W, H) {
   ctx.save();
@@ -608,10 +416,6 @@ function drawMiniBarcode(ctx, cx, y, color) {
   });
   ctx.restore();
 }
-
-/* ==========================================================================
-   4. RENDER LOOP: DRAWS LIVE CAMERA + TAEHYUNG INSIDE EACH STRIP SLOT
-   ========================================================================== */
 
 function getSlotRect(index) {
   return {
@@ -752,10 +556,6 @@ function renderBoothFrame() {
   requestAnimationFrame(renderBoothFrame);
 }
 
-/* ==========================================================================
-   5. 4-CUT COUNTDOWN CAPTURE SEQUENCE
-   ========================================================================== */
-
 async function startFourCutCapture() {
   if (state.isCapturing) return;
   state.isCapturing = true;
@@ -817,10 +617,6 @@ function triggerFlash() {
   flash.classList.add('flash-active');
   setTimeout(() => flash.classList.remove('flash-active'), 160);
 }
-
-/* ==========================================================================
-   6. UI CONTROLS, SHADE PALETTE & TOUCH DRAG
-   ========================================================================== */
 
 function renderPhotoPicker() {
   const container = document.getElementById('photo-picker');
