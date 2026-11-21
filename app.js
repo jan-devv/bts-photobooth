@@ -1,7 +1,8 @@
 /* ==========================================================================
-   TAEHYUNG PHOTOISM & LIFE4CUTS BOOTH (INSTANT ZERO-LAG PNG CUTOUTS)
+   TAEHYUNG PHOTOISM & LIFE4CUTS BOOTH (INSTANT PNG + MOBILE SAFARI FILTER FIX)
    - Direct instant loading of pre-cut transparent PNGs (0.1s load time)
-   - All borders, custom shades, stickers, 4-cut camera & controls intact
+   - Universal pixel filter fallback so B&W, Warm, Vintage, Soft & Brightness
+     work identically on iPhone Safari, Android, and Desktop browsers
    ========================================================================== */
 
 const PHOTO_CATALOG = [
@@ -157,6 +158,95 @@ const state = {
 const video = document.getElementById('camera-video');
 const canvas = document.getElementById('booth-canvas');
 const ctx = canvas.getContext('2d');
+
+// Detect if browser supports native CanvasRenderingContext2D.filter (Safari iOS does not)
+const SUPPORTS_CTX_FILTER = (() => {
+  try {
+    const testC = document.createElement('canvas');
+    testC.width = 2;
+    testC.height = 2;
+    const tCtx = testC.getContext('2d');
+    if (typeof tCtx.filter === 'undefined') return false;
+    tCtx.fillStyle = '#ff0000';
+    tCtx.filter = 'grayscale(1)';
+    tCtx.fillRect(0, 0, 1, 1);
+    const px = tCtx.getImageData(0, 0, 1, 1).data;
+    return px[0] !== 255;
+  } catch {
+    return false;
+  }
+})();
+
+// Reusable offscreen buffer for fast pixel-level filter fallback on iOS/mobile
+const slotBuffer = document.createElement('canvas');
+slotBuffer.width = 632;
+slotBuffer.height = 454;
+const slotBufCtx = slotBuffer.getContext('2d', { willReadFrequently: true });
+
+function applyPixelFilter(targetCtx, w, h, filterName, brightnessPct) {
+  const imgData = targetCtx.getImageData(0, 0, w, h);
+  const d = imgData.data;
+  const bright = brightnessPct / 100;
+
+  let contrast = 1.02;
+  let sat = 1.02;
+  let sepia = 0;
+  let gray = false;
+
+  if (filterName === 'bw') {
+    gray = true;
+    contrast = 1.22;
+  } else if (filterName === 'warm') {
+    sepia = 0.18;
+    sat = 1.14;
+    contrast = 1.03;
+  } else if (filterName === 'vintage') {
+    sepia = 0.32;
+    sat = 0.92;
+    contrast = 0.96;
+  } else if (filterName === 'soft') {
+    sat = 1.06;
+    contrast = 0.93;
+  }
+
+  const effectiveBright = filterName === 'soft' ? bright * 1.05 : bright;
+
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i] * effectiveBright;
+    let g = d[i + 1] * effectiveBright;
+    let b = d[i + 2] * effectiveBright;
+
+    if (gray) {
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+      r = g = b = lum;
+    } else {
+      if (sepia > 0) {
+        const sr = r * 0.393 + g * 0.769 + b * 0.189;
+        const sg = r * 0.349 + g * 0.686 + b * 0.168;
+        const sb = r * 0.272 + g * 0.534 + b * 0.131;
+        r = r * (1 - sepia) + sr * sepia;
+        g = g * (1 - sepia) + sg * sepia;
+        b = b * (1 - sepia) + sb * sepia;
+      }
+      if (sat !== 1) {
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = lum + (r - lum) * sat;
+        g = lum + (g - lum) * sat;
+        b = lum + (b - lum) * sat;
+      }
+    }
+
+    r = (r - 128) * contrast + 128;
+    g = (g - 128) * contrast + 128;
+    b = (b - 128) * contrast + 128;
+
+    d[i] = r < 0 ? 0 : r > 255 ? 255 : r;
+    d[i + 1] = g < 0 ? 0 : g > 255 ? 255 : g;
+    d[i + 2] = b < 0 ? 0 : b > 255 ? 255 : b;
+  }
+
+  targetCtx.putImageData(imgData, 0, 0);
+}
 
 const STRIP = { W: 720, H: 2160, padX: 44, topY: 54, slotW: 632, slotH: 454, gapY: 26 };
 
@@ -497,6 +587,7 @@ function renderBoothFrame() {
 
   drawBorderDecorations(ctx, theme, W, H);
 
+  const activeFilter = state.frame === 'bw' ? 'bw' : state.filter;
   const filterCss = state.frame === 'bw'
     ? `grayscale(1) contrast(1.22) brightness(${state.brightness}%)`
     : `${FILTERS[state.filter]} brightness(${state.brightness}%)`;
@@ -509,14 +600,31 @@ function renderBoothFrame() {
     ctx.beginPath();
     ctx.rect(rect.x, rect.y, rect.w, rect.h);
     ctx.clip();
-    ctx.filter = filterCss;
 
-    if (slotCfg.capturedImg) {
-      ctx.drawImage(slotCfg.capturedImg, rect.x, rect.y, rect.w, rect.h);
+    if (SUPPORTS_CTX_FILTER) {
+      ctx.filter = filterCss;
+      if (slotCfg.capturedImg) {
+        ctx.drawImage(slotCfg.capturedImg, rect.x, rect.y, rect.w, rect.h);
+      } else {
+        drawVideoOrBackdrop(ctx, rect, theme);
+        drawTaehyungInSlot(ctx, rect, slotCfg);
+      }
     } else {
-      drawVideoOrBackdrop(ctx, rect, theme);
-      drawTaehyungInSlot(ctx, rect, slotCfg);
+      // Universal mobile / iPhone Safari pixel-level filter path
+      const localRect = { x: 0, y: 0, w: rect.w, h: rect.h };
+      slotBufCtx.clearRect(0, 0, rect.w, rect.h);
+      if (slotCfg.capturedImg) {
+        slotBufCtx.drawImage(slotCfg.capturedImg, 0, 0, rect.w, rect.h);
+      } else {
+        drawVideoOrBackdrop(slotBufCtx, localRect, theme);
+        drawTaehyungInSlot(slotBufCtx, localRect, slotCfg);
+      }
+      if (activeFilter !== 'original' || state.brightness !== 100) {
+        applyPixelFilter(slotBufCtx, rect.w, rect.h, activeFilter, state.brightness);
+      }
+      ctx.drawImage(slotBuffer, rect.x, rect.y);
     }
+
     ctx.restore();
 
     ctx.strokeStyle = theme.slotBorder;
