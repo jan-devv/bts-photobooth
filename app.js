@@ -1,8 +1,8 @@
 /* ==========================================================================
-   TAEHYUNG PHOTOISM & LIFE4CUTS BOOTH (INSTANT PNG + MOBILE SAFARI FILTER FIX)
-   - Direct instant loading of pre-cut transparent PNGs (0.1s load time)
-   - Universal pixel filter fallback so B&W, Warm, Vintage, Soft & Brightness
-     work identically on iPhone Safari, Android, and Desktop browsers
+   TAEHYUNG PHOTOISM & LIFE4CUTS BOOTH
+   - Instant pre-cut PNG loading (0.1s load time)
+   - Full left-to-right drag & slider range (-420px to +420px)
+   - Universal pixel filter fallback for iPhone/Android Chrome & Safari
    ========================================================================== */
 
 const PHOTO_CATALOG = [
@@ -159,7 +159,6 @@ const video = document.getElementById('camera-video');
 const canvas = document.getElementById('booth-canvas');
 const ctx = canvas.getContext('2d');
 
-// Detect if browser supports native CanvasRenderingContext2D.filter (Safari iOS does not)
 const SUPPORTS_CTX_FILTER = (() => {
   try {
     const testC = document.createElement('canvas');
@@ -177,7 +176,6 @@ const SUPPORTS_CTX_FILTER = (() => {
   }
 })();
 
-// Reusable offscreen buffer for fast pixel-level filter fallback on iOS/mobile
 const slotBuffer = document.createElement('canvas');
 slotBuffer.width = 632;
 slotBuffer.height = 454;
@@ -610,7 +608,6 @@ function renderBoothFrame() {
         drawTaehyungInSlot(ctx, rect, slotCfg);
       }
     } else {
-      // Universal mobile / iPhone Safari pixel-level filter path
       const localRect = { x: 0, y: 0, w: rect.w, h: rect.h };
       slotBufCtx.clearRect(0, 0, rect.w, rect.h);
       if (slotCfg.capturedImg) {
@@ -844,6 +841,7 @@ function bindEvents() {
   document.getElementById('btn-v-side').addEventListener('click', () => {
     const slot = state.slots[state.selectedSlot];
     slot.vOnLeft = !slot.vOnLeft;
+    slot.x = 0;
     slot.capturedImg = null;
     syncSlotControls();
   });
@@ -946,8 +944,8 @@ function bindEvents() {
       st.y = Math.max(40, Math.min(STRIP.H - 40, state.dragging.origY + dy));
     } else {
       const slot = state.slots[state.dragging.index];
-      slot.x = Math.max(-180, Math.min(180, Math.round(state.dragging.origX + dx)));
-      slot.y = Math.max(-100, Math.min(120, Math.round(state.dragging.origY + dy)));
+      slot.x = Math.max(-420, Math.min(420, Math.round(state.dragging.origX + dx)));
+      slot.y = Math.max(-140, Math.min(160, Math.round(state.dragging.origY + dy)));
       slot.capturedImg = null;
       document.getElementById('photo-x').value = slot.x;
       document.getElementById('photo-y').value = slot.y;
@@ -991,8 +989,8 @@ function bindEvents() {
       st.y = Math.max(40, Math.min(STRIP.H - 40, state.dragging.origY + dy));
     } else {
       const slot = state.slots[state.dragging.index];
-      slot.x = Math.max(-180, Math.min(180, Math.round(state.dragging.origX + dx)));
-      slot.y = Math.max(-100, Math.min(120, Math.round(state.dragging.origY + dy)));
+      slot.x = Math.max(-420, Math.min(420, Math.round(state.dragging.origX + dx)));
+      slot.y = Math.max(-140, Math.min(160, Math.round(state.dragging.origY + dy)));
       slot.capturedImg = null;
       document.getElementById('photo-x').value = slot.x;
       document.getElementById('photo-y').value = slot.y;
