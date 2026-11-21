@@ -20,16 +20,55 @@
   </header>
 
   <main class="booth-workspace">
-    <!-- LEFT: LIVE PHOTOBOOTH STRIP -->
+    <!-- TOP / LEFT: SIDE-BY-SIDE STRIP PREVIEW + POSE & FACING CONTROLS -->
     <section class="preview-column">
-      <div class="strip-stage">
-        <canvas id="booth-canvas" width="720" height="2160"></canvas>
-        <div id="countdown-overlay" class="countdown-badge hidden">3</div>
+      <div class="live-stage-row">
+        <div class="strip-stage">
+          <canvas id="booth-canvas" width="720" height="2160"></canvas>
+          <div id="countdown-overlay" class="countdown-badge hidden">3</div>
+        </div>
+
+        <!-- 2. TAEHYUNG POSE & FACING (SIDE-BY-SIDE WITH STRIP) -->
+        <div class="control-card pose-side-card">
+          <div class="card-title-row">
+            <h2>Taehyung Pose &amp; Facing (<span id="selected-slot-badge">Slot 1</span>)</h2>
+            <div class="slot-switcher" id="slot-switcher">
+              <button class="slot-btn active" data-slot="0" type="button">1</button>
+              <button class="slot-btn" data-slot="1" type="button">2</button>
+              <button class="slot-btn" data-slot="2" type="button">3</button>
+              <button class="slot-btn" data-slot="3" type="button">4</button>
+            </div>
+          </div>
+
+          <div class="horizontal-scroll photo-strip-picker" id="photo-picker"></div>
+
+          <div class="facing-row">
+            <button id="btn-v-side" class="chip-btn" type="button">⇄ V Position: Right</button>
+            <button id="btn-v-flip" class="chip-btn" type="button">🔄 Facing: Normal</button>
+            <button id="btn-cam-mirror" class="chip-btn active" type="button">🪞 Cam Mirror: ON</button>
+          </div>
+
+          <div class="slider-grid">
+            <label class="slider-item">
+              <span>V Size</span>
+              <input type="range" id="photo-zoom" min="0.6" max="1.5" step="0.02" value="0.96" />
+            </label>
+            <label class="slider-item">
+              <span>Move X</span>
+              <input type="range" id="photo-x" min="-180" max="180" step="2" value="0" />
+            </label>
+            <label class="slider-item">
+              <span>Move Y</span>
+              <input type="range" id="photo-y" min="-100" max="120" step="2" value="0" />
+            </label>
+          </div>
+        </div>
       </div>
-      <p class="touch-hint" id="status-hint">Removing photo backgrounds cleanly...</p>
+
+      <p class="touch-hint" id="status-hint">Loading Taehyung studio cutouts...</p>
     </section>
 
-    <!-- RIGHT: CONTROLS -->
+    <!-- REMAINING CONTROLS -->
     <section class="controls-column">
       <!-- CAMERA CAPTURE BAR -->
       <div class="control-card capture-card">
@@ -105,42 +144,6 @@
               <input type="color" id="custom-color-input" value="#991b1b" />
             </label>
           </div>
-        </div>
-      </div>
-
-      <!-- 2. TAEHYUNG POSE, FACING DIRECTION & POSITION -->
-      <div class="control-card">
-        <div class="card-title-row">
-          <h2>2. Taehyung Pose &amp; Facing (<span id="selected-slot-badge">Slot 1</span>)</h2>
-          <div class="slot-switcher" id="slot-switcher">
-            <button class="slot-btn active" data-slot="0" type="button">1</button>
-            <button class="slot-btn" data-slot="1" type="button">2</button>
-            <button class="slot-btn" data-slot="2" type="button">3</button>
-            <button class="slot-btn" data-slot="3" type="button">4</button>
-          </div>
-        </div>
-
-        <div class="horizontal-scroll photo-strip-picker" id="photo-picker"></div>
-
-        <div class="facing-row">
-          <button id="btn-v-side" class="chip-btn" type="button">⇄ V Position: Right</button>
-          <button id="btn-v-flip" class="chip-btn" type="button">🔄 Facing: Normal</button>
-          <button id="btn-cam-mirror" class="chip-btn active" type="button">🪞 Cam Mirror: ON</button>
-        </div>
-
-        <div class="slider-grid">
-          <label class="slider-item">
-            <span>V Size</span>
-            <input type="range" id="photo-zoom" min="0.6" max="1.5" step="0.02" value="0.96" />
-          </label>
-          <label class="slider-item">
-            <span>Move X</span>
-            <input type="range" id="photo-x" min="-180" max="180" step="2" value="0" />
-          </label>
-          <label class="slider-item">
-            <span>Move Y</span>
-            <input type="range" id="photo-y" min="-100" max="120" step="2" value="0" />
-          </label>
         </div>
       </div>
 
